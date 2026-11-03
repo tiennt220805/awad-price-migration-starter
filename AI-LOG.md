@@ -138,6 +138,20 @@ Rejected: removing the statements about the modified `traffic.js` and about the 
 
 By hand: I chose the total (100). Everything else was written by the assistant; I still have to read it.
 
+## 2026-11-03 — second review of "What I did not manage" by the advisor model
+
+Tool: Claude Code (Sonnet 5.5) with an Opus 5.5 advisor.
+
+Asked for: check whether the section lists everything the instructor needs in order to confirm it, and whether it is accurate.
+
+Kept: two additions the advisor found and the assistant verified with git before writing them (the `INCONSISTENT` checks at C 42 and C 87; the tooling commits that come after `v5`, `git tag --contains e4e060e` being empty), plus a commit hash and a one-line check for each claim.
+
+Changed: the advisor first said the `traffic.js` change is newer than every tag; the assistant checked and it is not (`1dbf0b3` is in `v2`–`v5`, only `v1` lacks it), so the section says that instead.
+
+Rejected: nothing. No log, tag or code was touched.
+
+By hand: nothing; I still have to read the section and confirm each claim.
+
 ## Entries still to write (as I go)
 
 Add one entry per task in which the assistant helps from now on, using this format:
