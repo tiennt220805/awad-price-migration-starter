@@ -1,7 +1,12 @@
 import { createServer } from 'node:http';
 
-// v1 of the menu service. Prices are stored in THOUSANDS of dong, as a float:
-// 45.5 means 45,500 đ. That was last year's decision; IA#2 undoes it.
+// v2 of the menu service: DUAL WRITE. Every write path (POST /menu, PATCH
+// /menu/:id) writes BOTH columns; reads still come from `price`.
+//   price      thousands of dong, REAL     (old clients; still the source of truth)
+//   price_vnd  dong, INTEGER               (new clients; filled here, backfilled for old rows)
+// Requests accept `price` (thousands) or `priceVnd` (dong). Responses carry both,
+// and `priceVnd` is derived from `price`, never read from the column, because
+// the column may still be NULL for rows that have not been backfilled yet.
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -17,18 +22,40 @@ async function readBody(req) {
 }
 
 const isPrice = (p) => typeof p === 'number' && Number.isFinite(p) && p > 0 && p <= 100000;
+const isVnd = (p) => Number.isInteger(p) && p > 0 && p <= 100000 * 1000;
+
+// -> { price } (thousands) | { vnd } (dong) | null when invalid or both given and they disagree
+function parsePrice(body) {
+  const hasPrice = body.price !== undefined;
+  const hasVnd = body.priceVnd !== undefined;
+  if (hasPrice && !isPrice(body.price)) return null;
+  if (hasVnd && !isVnd(body.priceVnd)) return null;
+  if (hasPrice && hasVnd && Math.round(body.price * 1000) !== body.priceVnd) return null;
+  if (hasVnd) return { vnd: body.priceVnd };
+  if (hasPrice) return { price: body.price };
+  return null;
+}
 
 export function createApp(db) {
+  // price_vnd is computed by SQLite with exactly the formula scripts/check.js
+  // and the backfill use, so the three can never disagree on rounding.
   const q = {
     list: db.prepare('SELECT id, name, price FROM menu_items ORDER BY id LIMIT ? OFFSET ?'),
     get: db.prepare('SELECT id, name, price FROM menu_items WHERE id = ?'),
-    insert: db.prepare('INSERT INTO menu_items (name, price) VALUES (?, ?)'),
-    setPrice: db.prepare('UPDATE menu_items SET price = ? WHERE id = ?'),
+    insertPrice: db.prepare('INSERT INTO menu_items (name, price, price_vnd) VALUES (?, ?, CAST(round(? * 1000) AS INTEGER))'),
+    insertVnd: db.prepare('INSERT INTO menu_items (name, price, price_vnd) VALUES (?, ? / 1000.0, ?)'),
+    setPrice: db.prepare('UPDATE menu_items SET price = ?, price_vnd = CAST(round(? * 1000) AS INTEGER) WHERE id = ?'),
+    setVnd: db.prepare('UPDATE menu_items SET price = ? / 1000.0, price_vnd = ? WHERE id = ?'),
     insertOrder: db.prepare("INSERT INTO orders (created_at) VALUES (datetime('now'))"),
     insertLine: db.prepare('INSERT INTO order_items (order_id, menu_item_id, qty, unit_price) VALUES (?, ?, ?, ?)'),
   };
 
-  const view = (row) => ({ id: row.id, name: row.name, price: row.price });
+  const view = (row) => ({
+    id: row.id,
+    name: row.name,
+    price: row.price,
+    priceVnd: row.price == null ? null : Math.round(row.price * 1000),
+  });
 
   async function handle(req, res) {
     const url = new URL(req.url, 'http://x');
@@ -44,9 +71,12 @@ export function createApp(db) {
       }
       if (req.method === 'POST') {
         const body = await readBody(req);
-        if (!body || typeof body.name !== 'string' || !body.name || !isPrice(body.price))
-          return error(res, 400, 'invalid_body', 'name (string) and price (thousands of dong) are required');
-        const { lastInsertRowid } = q.insert.run(body.name, body.price);
+        const p = body && typeof body.name === 'string' && body.name ? parsePrice(body) : null;
+        if (!p)
+          return error(res, 400, 'invalid_body', 'name (string) and price (thousands of dong) or priceVnd (dong) are required');
+        const { lastInsertRowid } = p.vnd !== undefined
+          ? q.insertVnd.run(body.name, p.vnd, p.vnd)
+          : q.insertPrice.run(body.name, p.price, p.price);
         return json(res, 201, view(q.get.get(lastInsertRowid)));
       }
     }
@@ -58,9 +88,11 @@ export function createApp(db) {
       if (req.method === 'GET') return json(res, 200, view(row));
       if (req.method === 'PATCH') {
         const body = await readBody(req);
-        if (!body || !isPrice(body.price))
-          return error(res, 400, 'invalid_body', 'price (thousands of dong) is required');
-        q.setPrice.run(body.price, id);
+        const p = body ? parsePrice(body) : null;
+        if (!p)
+          return error(res, 400, 'invalid_body', 'price (thousands of dong) or priceVnd (dong) is required');
+        if (p.vnd !== undefined) q.setVnd.run(p.vnd, p.vnd, id);
+        else q.setPrice.run(p.price, p.price, id);
         return json(res, 200, view(q.get.get(id)));
       }
     }
