@@ -17,7 +17,11 @@ import { appendFileSync } from 'node:fs';
 
 const TARGETS = (process.env.TARGETS ?? 'http://localhost:3001,http://localhost:3002').split(',');
 const DURATION = Number(process.env.DURATION ?? 0);
-const NEW_CLIENTS = Number(process.env.NEW_CLIENTS ?? 0);
+let NEW_CLIENTS = Number(process.env.NEW_CLIENTS ?? 0);
+// IA#2 addition (see MIGRATION.md §6): NEW_CLIENTS is otherwise read once at
+// start, so one continuous run could never turn new clients on after the API
+// offers priceVnd. `kill -USR2 <pid>` switches between 0 and NEW_CLIENTS_ON.
+const NEW_CLIENTS_ON = Number(process.env.NEW_CLIENTS_ON ?? 0.3);
 const IDS = Number(process.env.IDS ?? 2000);
 const LOG = process.env.LOG ?? 'traffic-log.txt';
 const WORKERS = 8;
@@ -161,6 +165,10 @@ for (let id = 1; id <= FIXED; id++) {
 log(`\n=== traffic start ${new Date().toISOString()} · targets ${TARGETS.join(' ')} · new clients ${NEW_CLIENTS}`);
 let stop = false;
 process.on('SIGINT', () => { stop = true; });
+process.on('SIGUSR2', () => {
+  NEW_CLIENTS = NEW_CLIENTS > 0 ? 0 : NEW_CLIENTS_ON;
+  log(`${ts()} NEW_CLIENTS -> ${NEW_CLIENTS} (SIGUSR2)`);
+});
 if (DURATION) setTimeout(() => { stop = true; }, DURATION * 1000);
 
 const bad = () => n.error + n.contract + n.stale + n.unavailable;
