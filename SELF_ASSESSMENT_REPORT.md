@@ -2,6 +2,8 @@
 
 Submitted by: 23127128 — Nguyễn Thành Tiến
 
+Repository with the tags `v1`–`v5`: <https://github.com/tiennt220805/awad-price-migration-starter> (the zip contains the same `.git`).
+
 Total I claim: 100 / 100
 
 Line numbers below are lines of `traffic-log.txt` (T) and `check-log.txt` (C) at the repository root.

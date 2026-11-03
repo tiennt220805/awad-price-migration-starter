@@ -2,6 +2,8 @@
 
 Course CSC13114 · 23KTPM1 · individual assignment · 23127128 — Nguyễn Thành Tiến
 
+Repository: <https://github.com/tiennt220805/awad-price-migration-starter> (a fork of `fithcmus/awad-price-migration-starter`). The tags `v1`–`v5` are there as well as in the `.git` of the zip; the zip is the submission, the link is only for convenience. Tag list: <https://github.com/tiennt220805/awad-price-migration-starter/tags>.
+
 Goal: change `menu_items.price` (thousands of dong, REAL) into `menu_items.price_vnd` (dong, INTEGER) in the menu service, then drop `price`, while two instances keep serving traffic: no failed request at any step, and a way back at every step until the point of no return (step 6).
 
 Conventions used below.

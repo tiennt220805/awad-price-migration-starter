@@ -152,6 +152,20 @@ Rejected: nothing. No log, tag or code was touched.
 
 By hand: nothing; I still have to read the section and confirm each claim.
 
+## 2026-11-03 — link to the fork in the deliverables
+
+Tool: Claude Code (Sonnet 5.5).
+
+Asked for: add the link of my fork so that the tags can be seen without unzipping.
+
+Kept: one line in `MIGRATION.md` and one in `SELF_ASSESSMENT_REPORT.md` with https://github.com/tiennt220805/awad-price-migration-starter. The assistant checked that the repository and tag `v5` can be read without logging in (public).
+
+Changed: nothing else. No log, tag or code was touched.
+
+Rejected: nothing.
+
+By hand: I created the fork and gave the assistant its address.
+
 ## Entries still to write (as I go)
 
 Add one entry per task in which the assistant helps from now on, using this format:
