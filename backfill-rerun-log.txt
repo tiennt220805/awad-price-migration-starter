@@ -1,0 +1,45 @@
+# Backfill stop-and-rerun demonstration, on a scratch database (not the live one).
+# Schema 001+002, 20000 seeded rows. 2026-11-03 14:29:14
+
+applied  001_init
+applied  002_add_price_vnd
+seeded 20000 menu items
+
+## run 1: PAUSE_MS=200, interrupted with SIGINT after ~1.2 s
+before: 20000 rows with price_vnd NULL, 0 rows where it disagrees with price
+stopped: 6 batches, 3000 rows filled in 1225 ms; 17000 still to do, 0 rows have no price at all (skipped)
+
+## check after the interrupted run (rows still without price_vnd are expected)
+columns                id, name, price, price_vnd
+rows                   20000
+price_vnd_null         17000
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT, but 17000 rows have no price_vnd yet — nothing may read price_vnd until they do
+
+## run 2: same script again, to the end
+before: 17000 rows with price_vnd NULL, 0 rows where it disagrees with price
+batch 10  up to id 8000  filled 5000
+batch 20  up to id 13000  filled 10000
+batch 30  up to id 18000  filled 15000
+done: 34 batches, 17000 rows filled in 59 ms; 0 still to do, 0 rows have no price at all (skipped)
+
+## check
+columns                id, name, price, price_vnd
+rows                   20000
+price_vnd_null         0
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT
+
+## run 3: a finished table must change nothing
+before: 0 rows with price_vnd NULL, 0 rows where it disagrees with price
+done: 0 batches, 0 rows filled in 4 ms; 0 still to do, 0 rows have no price at all (skipped)
+
+## check
+columns                id, name, price, price_vnd
+rows                   20000
+price_vnd_null         0
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT

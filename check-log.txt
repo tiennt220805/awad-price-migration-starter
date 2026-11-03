@@ -1,0 +1,103 @@
+=== DRILL migrate:down on a scratch database (not under traffic) ===
+applied  001_init
+applied  002_add_price_vnd
+applied  003_drop_price
+reverted 003_drop_price
+=== after step: DRILL: 003 reverted · 2026-11-03 13:59:26 · traffic-log.txt has 0 lines ===
+columns                id, name, price_vnd, price
+rows                   0
+price_vnd_null         0
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT
+(npm run check exit code: 0)
+
+reverted 002_add_price_vnd
+=== after step: DRILL: 002 reverted · 2026-11-03 13:59:27 · traffic-log.txt has 0 lines ===
+columns                id, name, price
+rows                   0
+CONSISTENT
+(npm run check exit code: 0)
+
+reverted 001_init
+db /Users/tiennt/Desktop/HK10-2026-2027/Web-NC/AWAD-23KTPM1/IA/IA2/scratch.db
+[ ] 001_init
+[ ] 002_add_price_vnd
+[ ] 003_drop_price
+=== after step: 0 start: v1 on both, before traffic · 2026-11-03 14:03:43 · traffic-log.txt has 0 lines ===
+columns                id, name, price
+rows                   20000
+CONSISTENT
+(npm run check exit code: 0)
+
+=== after step: 1 expand: 002 applied, v1 still serving · 2026-11-03 14:06:13 · traffic-log.txt has 12 lines ===
+columns                id, name, price, price_vnd
+rows                   24595
+price_vnd_null         24595
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT, but 24595 rows have no price_vnd yet — nothing may read price_vnd until they do
+(npm run check exit code: 0)
+
+=== after step: 2 dual write: v2 on both (INCONSISTENT possible: v1 writes during the roll, repaired by step 3) · 2026-11-03 14:11:16 · traffic-log.txt has 77 lines ===
+columns                id, name, price, price_vnd
+rows                   49816
+price_vnd_null         38092
+price_vnd_not_integer  0
+disagree               34
+INCONSISTENT
+(npm run check exit code: 1)
+
+=== after step: 3 backfill · 2026-11-03 14:13:20 · traffic-log.txt has 103 lines ===
+columns                id, name, price, price_vnd
+rows                   60123
+price_vnd_null         0
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT
+(npm run check exit code: 0)
+
+=== after step: 4 v3 reads price_vnd · 2026-11-03 14:14:37 · traffic-log.txt has 122 lines ===
+columns                id, name, price, price_vnd
+rows                   66713
+price_vnd_null         0
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT
+(npm run check exit code: 0)
+
+=== after step: 4a rollback v3 -> v2 · 2026-11-03 14:15:55 · traffic-log.txt has 142 lines ===
+columns                id, name, price, price_vnd
+rows                   73309
+price_vnd_null         0
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT
+(npm run check exit code: 0)
+
+=== after step: 4b forward v2 -> v3 · 2026-11-03 14:17:14 · traffic-log.txt has 162 lines ===
+columns                id, name, price, price_vnd
+rows                   79848
+price_vnd_null         0
+price_vnd_not_integer  0
+disagree               0
+CONSISTENT
+(npm run check exit code: 0)
+
+=== after step: 5 v4 neither reads nor writes price (INCONSISTENT expected: price goes stale) · 2026-11-03 14:18:37 · traffic-log.txt has 182 lines ===
+columns                id, name, price, price_vnd
+rows                   86795
+price_vnd_null         0
+price_vnd_not_integer  0
+disagree               1898
+INCONSISTENT
+(npm run check exit code: 1)
+
+=== after step: 6 contract: 003 dropped price · 2026-11-03 14:19:19 · traffic-log.txt has 191 lines ===
+columns                id, name, price_vnd
+rows                   90250
+price_vnd_null         0
+price_vnd_not_integer  0
+CONSISTENT
+(npm run check exit code: 0)
+
