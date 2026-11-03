@@ -1,12 +1,11 @@
 import { createServer } from 'node:http';
 
-// v3 of the menu service: READS price_vnd. Every write path still writes BOTH
-// columns (as v2), so rolling back to v2, which reads `price`, stays safe.
-//   price_vnd  dong, INTEGER               (source of truth from this version on)
-//   price      thousands of dong, REAL     (kept in step by every write; read by nobody here)
-// Responses still carry `price` (thousands) for old clients, computed as
-// price_vnd / 1000, and `priceVnd`. Only run this after the backfill is finished
-// (scripts/check.js says CONSISTENT with no NULL price_vnd).
+// v4 of the menu service: neither READS nor WRITES the `price` column. Only
+// price_vnd (dong, INTEGER) is touched. Responses still carry `price` (thousands,
+// price_vnd / 1000) for old clients, and `priceVnd`, so no client notices.
+// From the moment an instance runs v4, rows it writes leave `price` behind: a
+// rollback to v2 (reads `price`) is no longer safe, a rollback to v3 still is.
+// Once every instance runs v4, migration 003 can drop the column.
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -37,15 +36,16 @@ function parsePrice(body) {
 }
 
 export function createApp(db) {
-  // price_vnd is computed by SQLite with exactly the formula scripts/check.js
-  // and the backfill use, so the three can never disagree on rounding.
+  // For an old client's `price` the value is computed by SQLite with exactly the
+  // formula scripts/check.js and the backfill use, so none of them can disagree
+  // on rounding.
   const q = {
     list: db.prepare('SELECT id, name, price_vnd FROM menu_items ORDER BY id LIMIT ? OFFSET ?'),
     get: db.prepare('SELECT id, name, price_vnd FROM menu_items WHERE id = ?'),
-    insertPrice: db.prepare('INSERT INTO menu_items (name, price, price_vnd) VALUES (?, ?, CAST(round(? * 1000) AS INTEGER))'),
-    insertVnd: db.prepare('INSERT INTO menu_items (name, price, price_vnd) VALUES (?, ? / 1000.0, ?)'),
-    setPrice: db.prepare('UPDATE menu_items SET price = ?, price_vnd = CAST(round(? * 1000) AS INTEGER) WHERE id = ?'),
-    setVnd: db.prepare('UPDATE menu_items SET price = ? / 1000.0, price_vnd = ? WHERE id = ?'),
+    insertPrice: db.prepare('INSERT INTO menu_items (name, price_vnd) VALUES (?, CAST(round(? * 1000) AS INTEGER))'),
+    insertVnd: db.prepare('INSERT INTO menu_items (name, price_vnd) VALUES (?, ?)'),
+    setPrice: db.prepare('UPDATE menu_items SET price_vnd = CAST(round(? * 1000) AS INTEGER) WHERE id = ?'),
+    setVnd: db.prepare('UPDATE menu_items SET price_vnd = ? WHERE id = ?'),
     insertOrder: db.prepare("INSERT INTO orders (created_at) VALUES (datetime('now'))"),
     insertLine: db.prepare('INSERT INTO order_items (order_id, menu_item_id, qty, unit_price) VALUES (?, ?, ?, ?)'),
   };
@@ -72,8 +72,8 @@ export function createApp(db) {
         if (!p)
           return error(res, 400, 'invalid_body', 'name (string) and price (thousands of dong) or priceVnd (dong) are required');
         const { lastInsertRowid } = p.vnd !== undefined
-          ? q.insertVnd.run(body.name, p.vnd, p.vnd)
-          : q.insertPrice.run(body.name, p.price, p.price);
+          ? q.insertVnd.run(body.name, p.vnd)
+          : q.insertPrice.run(body.name, p.price);
         return json(res, 201, view(q.get.get(lastInsertRowid)));
       }
     }
@@ -88,8 +88,8 @@ export function createApp(db) {
         const p = body ? parsePrice(body) : null;
         if (!p)
           return error(res, 400, 'invalid_body', 'price (thousands of dong) or priceVnd (dong) is required');
-        if (p.vnd !== undefined) q.setVnd.run(p.vnd, p.vnd, id);
-        else q.setPrice.run(p.price, p.price, id);
+        if (p.vnd !== undefined) q.setVnd.run(p.vnd, id);
+        else q.setPrice.run(p.price, id);
         return json(res, 200, view(q.get.get(id)));
       }
     }
