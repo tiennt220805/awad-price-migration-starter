@@ -1,5 +1,7 @@
 # IA#2 starter — change a column under live traffic
 
+**Student:** Nguyễn Thành Tiến — 23127128 · Class 23KTPM1 · IA#2 submission. Plan, logs and self-assessment: `MIGRATION.md`, `traffic-log.txt`, `check-log.txt`, `AI-LOG.md`, `SELF_ASSESSMENT_REPORT.md`. The text below is the starter's own README, unchanged.
+
 CSC13114 · Advanced Web Application Development · HK1 2026–2027
 
 The menu service of `smart-restaurant`, cut down to what IA#2 needs. Node 22.5+,

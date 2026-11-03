@@ -166,6 +166,20 @@ Rejected: nothing.
 
 By hand: I created the fork and gave the assistant its address.
 
+## 2026-11-03 — name and student ID in the README
+
+Tool: Claude Code (Sonnet 5.5).
+
+Asked for: put my name and student ID in `README.md`.
+
+Kept: one line added under the title of the starter's README (name, ID, class, pointers to the deliverables); the rest of the README is unchanged.
+
+Changed: nothing else. No log, tag or code was touched.
+
+Rejected: nothing.
+
+By hand: I asked for it; the assistant wrote the line.
+
 ## Entries still to write (as I go)
 
 Add one entry per task in which the assistant helps from now on, using this format:
