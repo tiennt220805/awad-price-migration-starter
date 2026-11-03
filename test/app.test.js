@@ -10,8 +10,8 @@ before(async () => {
   const dir = new URL('../migrations/', import.meta.url);
   for (const f of readdirSync(dir).filter((f) => f.endsWith('.up.sql')).sort())
     db.exec(readFileSync(new URL(f, dir), 'utf8'));          // every migration, in order
-  // as in production while v2 runs: rows from before the backfill have no price_vnd yet
-  db.exec("INSERT INTO menu_items (name, price) VALUES ('Phở bò', 45.5), ('Trà đá', 5)");
+  // as in production once the backfill is done: both columns are filled
+  db.exec("INSERT INTO menu_items (name, price, price_vnd) VALUES ('Phở bò', 45.5, 45500), ('Trà đá', 5, 5000)");
   server = createApp(db).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://localhost:${server.address().port}`;
@@ -52,11 +52,10 @@ test('POST /menu writes both columns whichever unit the client sends', async () 
   assert.deepEqual({ ...columns(b.body.id) }, { price: 30, price_vnd: 30000 });
 });
 
-test('a row from before the backfill still answers with priceVnd, derived from price', async () => {
-  db.exec("INSERT INTO menu_items (name, price) VALUES ('Cũ', 20)");   // price_vnd stays NULL
+test('v3 reads price_vnd: the price column is ignored on reads', async () => {
+  db.exec("INSERT INTO menu_items (name, price, price_vnd) VALUES ('Lệch', 1, 20000)");   // deliberately different
   const id = db.prepare('SELECT max(id) id FROM menu_items').get().id;
-  assert.equal(columns(id).price_vnd, null);
-  assert.deepEqual((await call('GET', `/menu/${id}`)).body, { id, name: 'Cũ', price: 20, priceVnd: 20000 });
+  assert.deepEqual((await call('GET', `/menu/${id}`)).body, { id, name: 'Lệch', price: 20, priceVnd: 20000 });
 });
 
 test('price and priceVnd that disagree are rejected', async () => {

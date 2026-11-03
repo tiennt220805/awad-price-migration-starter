@@ -1,12 +1,12 @@
 import { createServer } from 'node:http';
 
-// v2 of the menu service: DUAL WRITE. Every write path (POST /menu, PATCH
-// /menu/:id) writes BOTH columns; reads still come from `price`.
-//   price      thousands of dong, REAL     (old clients; still the source of truth)
-//   price_vnd  dong, INTEGER               (new clients; filled here, backfilled for old rows)
-// Requests accept `price` (thousands) or `priceVnd` (dong). Responses carry both,
-// and `priceVnd` is derived from `price`, never read from the column, because
-// the column may still be NULL for rows that have not been backfilled yet.
+// v3 of the menu service: READS price_vnd. Every write path still writes BOTH
+// columns (as v2), so rolling back to v2, which reads `price`, stays safe.
+//   price_vnd  dong, INTEGER               (source of truth from this version on)
+//   price      thousands of dong, REAL     (kept in step by every write; read by nobody here)
+// Responses still carry `price` (thousands) for old clients, computed as
+// price_vnd / 1000, and `priceVnd`. Only run this after the backfill is finished
+// (scripts/check.js says CONSISTENT with no NULL price_vnd).
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -40,8 +40,8 @@ export function createApp(db) {
   // price_vnd is computed by SQLite with exactly the formula scripts/check.js
   // and the backfill use, so the three can never disagree on rounding.
   const q = {
-    list: db.prepare('SELECT id, name, price FROM menu_items ORDER BY id LIMIT ? OFFSET ?'),
-    get: db.prepare('SELECT id, name, price FROM menu_items WHERE id = ?'),
+    list: db.prepare('SELECT id, name, price_vnd FROM menu_items ORDER BY id LIMIT ? OFFSET ?'),
+    get: db.prepare('SELECT id, name, price_vnd FROM menu_items WHERE id = ?'),
     insertPrice: db.prepare('INSERT INTO menu_items (name, price, price_vnd) VALUES (?, ?, CAST(round(? * 1000) AS INTEGER))'),
     insertVnd: db.prepare('INSERT INTO menu_items (name, price, price_vnd) VALUES (?, ? / 1000.0, ?)'),
     setPrice: db.prepare('UPDATE menu_items SET price = ?, price_vnd = CAST(round(? * 1000) AS INTEGER) WHERE id = ?'),
@@ -50,12 +50,9 @@ export function createApp(db) {
     insertLine: db.prepare('INSERT INTO order_items (order_id, menu_item_id, qty, unit_price) VALUES (?, ?, ?, ?)'),
   };
 
-  const view = (row) => ({
-    id: row.id,
-    name: row.name,
-    price: row.price,
-    priceVnd: row.price == null ? null : Math.round(row.price * 1000),
-  });
+  // price in thousands, as old clients and order_items.unit_price expect
+  const thousands = (row) => (row.price_vnd == null ? null : row.price_vnd / 1000);
+  const view = (row) => ({ id: row.id, name: row.name, price: thousands(row), priceVnd: row.price_vnd });
 
   async function handle(req, res) {
     const url = new URL(req.url, 'http://x');
@@ -108,8 +105,9 @@ export function createApp(db) {
         for (const { menuItemId, qty } of body.items) {
           const item = q.get.get(menuItemId);
           if (!item || !Number.isInteger(qty) || qty < 1) throw Object.assign(new Error(), { status: 400 });
-          q.insertLine.run(orderId, item.id, qty, item.price);
-          total += item.price * qty;
+          const unit = thousands(item);
+          q.insertLine.run(orderId, item.id, qty, unit);
+          total += unit * qty;
         }
         db.exec('COMMIT');
         return json(res, 201, { id: Number(orderId), total: Math.round(total * 1000) / 1000 });
